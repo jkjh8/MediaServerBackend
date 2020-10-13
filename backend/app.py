@@ -25,8 +25,12 @@ def test_router():
 def play_command():
     data = request.get_json()
     command = data['command']
-    udpSender(command)
-    print(command)
+    if command == "play":
+        file = data['file']
+        print(file)
+        udpSender("{},{}".format(command,file))
+    else:
+        udpSender(command)
     return jsonify(command)
 
 @app.route('/upload', methods = ['POST'])
@@ -35,6 +39,12 @@ def upload_file():
     f.save(os.path.join('../media/', secure_filename(f.filename)))
     file_list = os.listdir('../media/')
     return jsonify(file_list)
+
+@app.route('/refresh')
+def refresh_files():
+    file_list = os.listdir('../media/')
+    return jsonify(file_list)
+
 
 def udpSender(msg):
     udpSendSock.sendto(msg.encode(), (playServerIP, playServerPort))
