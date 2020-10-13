@@ -1,17 +1,28 @@
 # -*- coding: utf-8 -*-
-import sys, vlc, socket, os.path, threading
+import sys, vlc, socket, os.path, threading, json
 from _thread import *
 from time import sleep
 
 instance = vlc.Instance()
 player = instance.media_player_new()
 
+rtIp = '127.0.0.1'
+rtPort = 9999
+
+
 class main_UdpServer():
+    global rtIp, rtPort
     def __init__(self):
         port = 12302
+        self.playlist = None
+        self.udpSendSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind((socket.gethostbyname(socket.gethostname()), port))
-        print("Udp Server Start {} : {}".format(socket.gethostbyname(socket.gethostname()), port))
+        self.sock.bind(('127.0.0.1', port))
+        print("Udp Server Start {} : {}".format('127.0.0.1', port))
+
+    def playlist_Refresh(self):
+        with open('playlist.json') as playlist_file:
+            self.playlist = json.load(playlist_file)
 
     def run(self):
         while True:
@@ -21,10 +32,38 @@ class main_UdpServer():
             self.dataParcing(recv_Msg)
             
     def dataParcing(self, data):
-        if data == "play":
-            mp.play("1.mp4")
-        elif data == "stop":
+        if data == "stop":
             mp.stop()
+        else:
+            comm = data.split(',')
+            if comm[0] == 'play':
+                file_path = os.path.abspath('./media/')
+                file = os.path.join(file_path, comm[1])
+                print(file)
+                if os.path.isfile(file):
+                    mp.play(file)
+                    start_new_thread(self.udpSender, ('play,{}'.format(comm[1]),))
+                else:
+                    start_new_thread(self.udpSender, ('file error',))
+
+            if comm[0] == 'playid':
+                self.playlist_Refresh()
+
+                file_path = os.path.abspath('./media/')
+                file = os.path.join(file_path, self.playlist[comm[1]])
+                print(file)
+                if os.path.isfile(file):
+                    mp.play(file)
+                    start_new_thread(self.udpSender, ('play,{}'.format(comm[1]),))
+                else:
+                    start_new_thread(self.udpSender, ('file error',))
+            
+
+                
+
+    def udpSender(self, msg):
+        self.udpSendSock.sendto(msg.encode(), (rtIp, rtPort))
+            
 
 class media_Player():
     def __init__(self):
