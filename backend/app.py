@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-import os, socket
+import os, socket, json
 
 playServerIP = "127.0.0.1"
 playServerPort = 12302
@@ -21,7 +21,7 @@ def test_router():
 
     return jsonify('This is Docker Test developments Server!')
 
-@app.route('/play', methods=['post'])
+@app.route('/player', methods=['post'])
 def play_command():
     data = request.get_json()
     command = data['command']
@@ -40,14 +40,35 @@ def upload_file():
     file_list = os.listdir('../media/')
     return jsonify(file_list)
 
-@app.route('/refresh')
+@app.route('/getFileList', methods = ['GET'])
 def refresh_files():
     file_list = os.listdir('../media/')
     return jsonify(file_list)
+
+@app.route('/setPlayList', methods = ['POST'])
+def setPlayList():
+    data = request.get_json()
+    playList = data['playList']
+    dict_playlist = {i:playList[i] for i in range(len(playList))}
+    with open('../playlist.json', 'w') as playlistfile:
+        json.dump(dict_playlist, playlistfile)
+    return jsonify(playList)
+
+@app.route('/getPlayList', methods = ['GET'])
+def getPlayList():
+    with open('../playlist.json','r') as playlist_file:
+        playList = json.load(playlist_file)
+    playList = playList.values()
+    playList = list(playList)
+    # print(playList.values())
+    print(type(playList))
+    return jsonify(playList)
+        
+
 
 
 def udpSender(msg):
     udpSendSock.sendto(msg.encode(), (playServerIP, playServerPort))
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', debug=True)
