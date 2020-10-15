@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -19,7 +19,7 @@ CORS(app, resources={r'/*': {'origins': '*'}})
 @app.route('/', methods=['GET'])
 def test_router():
 
-    return jsonify('This is Docker Test developments Server!')
+    return render_template('index.html')
 
 @app.route('/player', methods=['post'])
 def play_command():
@@ -56,19 +56,13 @@ def setPlayList():
 
 @app.route('/getPlayList', methods = ['GET'])
 def getPlayList():
-    with open('../playlist.json','r') as playlist_file:
-        playList = json.load(playlist_file)
-    playList = playList.values()
-    playList = list(playList)
-    # print(playList.values())
-    print(type(playList))
-    return jsonify(playList)
-        
-
-
+	with open('../playlist.json', 'r') as playlistfile:
+		playList = json.load(playlistfile)
+	playList = list(playList.values())
+	return jsonify(playList)
 
 def udpSender(msg):
     udpSendSock.sendto(msg.encode(), (playServerIP, playServerPort))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+    app.run(host='0.0.0.0',port=12300, debug=True)
