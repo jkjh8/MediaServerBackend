@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+from pymediainfo import MediaInfo
 
 import os, socket, json
 
@@ -8,6 +9,11 @@ playServerIP = "127.0.0.1"
 playServerPort = 12302
 
 udpSendSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+MEDIA_DIR = os.path.join(BASE_DIR,'media')
+
+fileList = []
 
 # instantiate the app
 app = Flask(__name__)
@@ -42,8 +48,8 @@ def upload_file():
 
 @app.route('/getFileList', methods = ['GET'])
 def refresh_files():
-    file_list = os.listdir('../media/')
-    return jsonify(file_list)
+    fileList = getMediaFileData()
+    return jsonify(fileList)
 
 @app.route('/setPlayList', methods = ['POST'])
 def setPlayList():
@@ -60,6 +66,22 @@ def getPlayList():
 		playList = json.load(playlistfile)
 	playList = list(playList.values())
 	return jsonify(playList)
+
+def getMediaFileData():
+    fileList = []
+    fileNameList = os.listdir(MEDIA_DIR)
+    for item in fileNameList:
+        fileInfo = {}
+        info = MediaInfo.parse(os.path.join(MEDIA_DIR,item)).tracks[0]
+        fileInfo['name'] = info.file_name
+        fileInfo['complete_name'] = info.complete_name
+        fileInfo['type'] = info.file_extension
+        fileInfo['size'] = info.other_file_size[0]
+        fileInfo['duration'] = info.other_duration[0]
+        fileList.append(fileInfo)
+    return(fileList)
+
+
 
 def udpSender(msg):
     udpSendSock.sendto(msg.encode(), (playServerIP, playServerPort))
