@@ -105,17 +105,15 @@ def getMediaFileData():
         fileList.append(fileInfo)
     return(fileList)
 
-@socketio.on('chat')
 def socket_get_playlist(message):
-    print('send msg')
-    emit('response', message, broadcast=True)
+    socketio.emit('chat','message!')
 
 def ack():
     print('recive')
 
-@socketio.on('connect')
+@socketio.on('chat')
 def test_connect():
-    emit('response', {'data': 'Connected'})
+    send({'data': 'Connected'})
 
 @socketio.on('disconnect')
 def test_disconnect():
@@ -123,7 +121,7 @@ def test_disconnect():
 
 @socketio.on('message')
 def handle_message(message):
-    socket_get_playlist(message)
+    send("ok MSG")
     print('message = ',message)
 
 def udpSender(msg):
