@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, request, render_template
+from flask_socketio import SocketIO, send, emit
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from pymediainfo import MediaInfo
@@ -13,10 +14,10 @@ udpSendSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
 MEDIA_DIR = os.path.join(BASE_DIR,'media')
 
-fileList = []
-
 # instantiate the app
 app = Flask(__name__)
+app.secret_key = "secret"
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # enable CORS
 CORS(app, resources={r'/*': {'origins': '*'}})
@@ -24,7 +25,6 @@ CORS(app, resources={r'/*': {'origins': '*'}})
 # sanity check route
 @app.route('/', methods=['GET'])
 def test_router():
-
     return render_template('index.html')
 
 @app.route('/player', methods=['post'])
@@ -33,7 +33,6 @@ def play_command():
     command = data['command']
     if command == "play":
         file = data['file']
-        print(file)
         udpSender("{},{}".format(command,file))
     else:
         udpSender(command)
@@ -41,31 +40,56 @@ def play_command():
 
 @app.route('/upload', methods = ['POST'])
 def upload_file():
-    f =request.files['file']
-    f.save(os.path.join('../media/', secure_filename(f.filename)))
-    file_list = os.listdir('../media/')
-    return jsonify(file_list)
+    f = request.files['file']
+    # print(f.filename)
+    f.save(os.path.join(MEDIA_DIR, f.filename))
+    return jsonify(success=True)
 
 @app.route('/getFileList', methods = ['GET'])
 def refresh_files():
-    fileList = getMediaFileData()
-    return jsonify(fileList)
+    return jsonify(getMediaFileData())
+
+
 
 @app.route('/setPlayList', methods = ['POST'])
 def setPlayList():
-    data = request.get_json()
-    playList = data['playList']
-    dict_playlist = {i:playList[i] for i in range(len(playList))}
-    with open('../playlist.json', 'w') as playlistfile:
-        json.dump(dict_playlist, playlistfile)
-    return jsonify(playList)
+    # data = compare_playlist(request.get_json())
+    savefile_playlist(request.get_json())
+    socket_get_playlist(request.get_json())
+    return jsonify(success=True)
 
 @app.route('/getPlayList', methods = ['GET'])
 def getPlayList():
-	with open('../playlist.json', 'r') as playlistfile:
-		playList = json.load(playlistfile)
-	playList = list(playList.values())
-	return jsonify(playList)
+    return jsonify(loadfile_playlist())
+
+def loadfile_playlist():
+    with open('../playlist.json', 'r') as playlistfile:
+        playList = json.load(playlistfile)
+    return (playList)
+
+def compare_playlist():
+    play_list = loadfile_playlist()
+    fileNameList = os.listdir(MEDIA_DIR)
+    for file in play_list:
+        # print(os.path.basename(file['complete_name']))
+        if os.path.basename(file['complete_name']) not in fileNameList:
+            play_list.remove(file)        
+    return(play_list)
+
+@app.route('/removeFile', methods = ['POST'])
+def remove_file():
+    data = request.get_json()
+    file = data['file']    
+    if os.path.isfile(file):
+        os.remove(file)
+    savefile_playlist(compare_playlist())
+    fileList = getMediaFileData()
+    
+    return jsonify(fileList)
+
+def savefile_playlist(playlist):
+    with open('../playlist.json', 'w') as playlistfile:
+        json.dump(playlist, playlistfile)
 
 def getMediaFileData():
     fileList = []
@@ -76,15 +100,34 @@ def getMediaFileData():
         fileInfo['name'] = info.file_name
         fileInfo['complete_name'] = info.complete_name
         fileInfo['type'] = info.file_extension
-        fileInfo['size'] = info.other_file_size[0]
-        fileInfo['duration'] = info.other_duration[0]
+        fileInfo['size'] = info.file_size
+        fileInfo['duration'] = info.duration
         fileList.append(fileInfo)
     return(fileList)
 
+@socketio.on('chat')
+def socket_get_playlist(message):
+    print('send msg')
+    emit('response', message, broadcast=True)
 
+def ack():
+    print('recive')
+
+@socketio.on('connect')
+def test_connect():
+    emit('response', {'data': 'Connected'})
+
+@socketio.on('disconnect')
+def test_disconnect():
+    print('Client disconnected')
+
+@socketio.on('message')
+def handle_message(message):
+    socket_get_playlist(message)
+    print('message = ',message)
 
 def udpSender(msg):
     udpSendSock.sendto(msg.encode(), (playServerIP, playServerPort))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0',port=12300, debug=True)
+    socketio.run(app, host='0.0.0.0',port=12300, debug=True)
