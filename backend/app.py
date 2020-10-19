@@ -138,7 +138,10 @@ def handle_message(message):
     send("ok MSG")
 
 def udpSender(msg):
-    udpSendSock.sendto(msg.encode(), (playServerIP, playServerPort))
+    try:
+        udpSendSock.sendto(msg.encode(), (playServerIP, playServerPort))
+    except Exception as e:
+        print('error : ', e)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0',port=12300, debug=True)
