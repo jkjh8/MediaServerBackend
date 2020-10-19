@@ -41,7 +41,6 @@ def play_command():
 @app.route('/upload', methods = ['POST'])
 def upload_file():
     f = request.files['file']
-    # print(f.filename)
     f.save(os.path.join(MEDIA_DIR, f.filename))
     return jsonify(success=True)
 
@@ -49,18 +48,23 @@ def upload_file():
 def refresh_files():
     return jsonify(getMediaFileData())
 
-
-
 @app.route('/setPlayList', methods = ['POST'])
 def setPlayList():
-    # data = compare_playlist(request.get_json())
-    savefile_playlist(request.get_json())
-    socket_get_playlist(request.get_json())
+    data = request.get_json()
+    savefile_playlist(data)
+    socket_get_playlist(data)
+    udpSender('playlist,{}'.format(data))
     return jsonify(success=True)
 
 @app.route('/getPlayList', methods = ['GET'])
 def getPlayList():
     return jsonify(loadfile_playlist())
+
+@app.route('/playlistrefresh', methods = ['GET'])
+def PlayListFresh():
+    play_list = compare_playlist()
+    savefile_playlist(play_list)
+    return (jsonify(play_list))
 
 def loadfile_playlist():
     with open('../playlist.json', 'r') as playlistfile:
@@ -71,9 +75,9 @@ def compare_playlist():
     play_list = loadfile_playlist()
     fileNameList = os.listdir(MEDIA_DIR)
     for file in play_list:
-        # print(os.path.basename(file['complete_name']))
         if os.path.basename(file['complete_name']) not in fileNameList:
-            play_list.remove(file)        
+            print(file)
+            play_list.remove(file)
     return(play_list)
 
 @app.route('/removeFile', methods = ['POST'])
@@ -84,7 +88,7 @@ def remove_file():
         os.remove(file)
     savefile_playlist(compare_playlist())
     fileList = getMediaFileData()
-    
+    socket_get_filelist(fileList)    
     return jsonify(fileList)
 
 def savefile_playlist(playlist):
@@ -106,16 +110,23 @@ def getMediaFileData():
     return(fileList)
 
 def socket_get_playlist(data):
-    socketio.emit('playlist',data)
+    socketio.emit('playlist', data)
 
-@socketio.on('connect')
-def test_connect():
-    send({'data': 'Connected'})
+def socket_get_filelist(data):
+    socketio.emit('filelist', data)
+
+def socket_get_player_setup(data):
+    socketio.emit('playersetup', data)
+
+@socketio.on('filelist')
+def socket_Get_File_list_Call():
+    print('list')
+    data = getMediaFileData()
+    emit('filelist', data, broadcast=True)
 
 @socketio.on('message')
 def handle_message(message):
     send("ok MSG")
-    print('message = ',message)
 
 def udpSender(msg):
     udpSendSock.sendto(msg.encode(), (playServerIP, playServerPort))
