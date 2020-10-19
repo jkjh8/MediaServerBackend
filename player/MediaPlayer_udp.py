@@ -63,7 +63,7 @@ class main_UdpServer():
                 self.play(comm[1])
 
             elif comm[0] == 'playid':
-                self.mp.playid(comm[1])
+                self.playid(int(comm[1]))
 
             elif comm[0] == 'returnip':
                 self.setup['rtIp'] = comm[1]; self.setup['rtPort'] = int(comm[2])

@@ -44,6 +44,10 @@ def upload_file():
     f.save(os.path.join(MEDIA_DIR, f.filename))
     return jsonify(success=True)
 
+@app.route('/getSetup', methods = ['GET'])
+def get_setup():
+    return jsonify(loadfile_setup())
+
 @app.route('/getFileList', methods = ['GET'])
 def refresh_files():
     return jsonify(getMediaFileData())
@@ -65,6 +69,11 @@ def PlayListFresh():
     play_list = compare_playlist()
     savefile_playlist(play_list)
     return (jsonify(play_list))
+
+def loadfile_setup():
+    with open('..setup.json', 'r') as setupfile:
+        setup = json.load(setupfile)
+    return (setup)
 
 def loadfile_playlist():
     with open('../playlist.json', 'r') as playlistfile:
