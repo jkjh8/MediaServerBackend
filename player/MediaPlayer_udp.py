@@ -51,53 +51,61 @@ class main_UdpServer():
             self.dataParcing(recv_Msg)
             
     def dataParcing(self, data):
-        if data == "stop":
-            self.mp.stop()
-            self.udpSender('stop')
-        elif data == "pause":
-            self.mp.pause()
-            self.udpSender('pause')
-        else:
-            comm = data.split(',')
-            if comm[0] == 'play':
-                self.play(comm[1])
+        try:
 
-            elif comm[0] == 'playid':
-                self.playid(int(comm[1]))
-
-            elif comm[0] == 'returnip':
-                self.setup['rtIp'] = comm[1]; self.setup['rtPort'] = int(comm[2])
-                self.udpSender('returnAddr,{},{}'.format(self.setup['rtIp'], self.setup['rtPort']))
-            
-            elif comm[0] == 'fullscreen':
-                if comm[1] == 'true' or comm[1] == '1': self.setup['fullscreen'] = True
-                else: self.setup['fullscreen'] = False
-                self.mp.fullscreen(); self.setup_save()
-
-            elif comm[0] == 'loop_one':
-                if comm[1] == 'true' or comm[1] == '1': self.setup['loop_one'] = True
-                else: self.setup['loop'] = False
-                self.udpSender('loop_one,{}'.format(self.setup['loop_one']))
-
-            elif comm[0] == 'loop':
-                if comm[1] == 'true' or comm[1] == '1': self.setup['loop_one'] = True
-                else: self.setup['loop'] = False
-                self.udpSender('loop,{}'.format(self.setup['loop']))
-
-            elif comm[0] == 'progress':
-                if comm[1] == 'true' or comm[1] == '1': self.setup['progress'] = True
-                else: self.setup['progress'] = False
-            
-            elif comm[0] == 'playlist':
-                self.playlist = json.loads(data.replace('playlist,','').replace("'",'"'))
-
-            elif comm[0] == 'endclose':
-                if comm[1] == 'true' or comm[1] == '1': self.setup['endclose'] = True
-                else: self.setup['endclose'] = False
-
+            if data == "stop":
+                self.mp.stop()
+                self.udpSender('stop')
+            elif data == "pause":
+                self.mp.pause()
+                self.udpSender('pause')
+            elif data == "getlist":
+                list = []
+                for item in self.playlist:
+                    list.append(item['name'])
+                self.udpSender('playlist,{}'.format(list))
             else:
-                start_new_thread(self.udpSender, ('unknown command'),)
-        self.setup_save()
+                comm = data.split(',')
+                if comm[0] == 'play':
+                    self.play(comm[1])
+
+                elif comm[0] == 'playid':
+                    self.playid(int(comm[1]))
+
+                elif comm[0] == 'returnip':
+                    self.setup['rtIp'] = comm[1]; self.setup['rtPort'] = int(comm[2])
+                    self.udpSender('returnAddr,{},{}'.format(self.setup['rtIp'], self.setup['rtPort']))
+                
+                elif comm[0] == 'fullscreen':
+                    if comm[1] == 'true' or comm[1] == '1': self.setup['fullscreen'] = True
+                    else: self.setup['fullscreen'] = False
+                    self.mp.fullscreen();
+
+                elif comm[0] == 'loop_one':
+                    if comm[1] == 'true' or comm[1] == '1': self.setup['loop_one'] = True
+                    else: self.setup['loop'] = False
+                    self.udpSender('loop_one,{}'.format(self.setup['loop_one']))
+
+                elif comm[0] == 'loop':
+                    if comm[1] == 'true' or comm[1] == '1': self.setup['loop_one'] = True
+                    else: self.setup['loop'] = False
+                    self.udpSender('loop,{}'.format(self.setup['loop']))
+
+                elif comm[0] == 'progress':
+                    if comm[1] == 'true' or comm[1] == '1': self.setup['progress'] = True
+                    else: self.setup['progress'] = False
+                
+                elif comm[0] == 'playlist':
+                    self.playlist = json.loads(data.replace('playlist,','').replace("'",'"'))
+
+                elif comm[0] == 'endclose':
+                    if comm[1] == 'true' or comm[1] == '1': self.setup['endclose'] = True
+                    else: self.setup['endclose'] = False
+                else:
+                    start_new_thread(self.udpSender, ('unknown command'),)
+            self.setup_save()
+        except Exception as e:
+            print(e)
 
     def play(self, playfile):
         file = os.path.join(MEDIA_PATH, playfile)

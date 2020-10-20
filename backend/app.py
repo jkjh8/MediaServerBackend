@@ -46,7 +46,28 @@ def upload_file():
 
 @app.route('/getSetup', methods = ['GET'])
 def get_setup():
+    print('getSetup')
     return jsonify(loadfile_setup())
+
+@app.route('/setSetup', methods = ['POST'])
+def set_setup():
+    print('setSetup')
+    setup = loadfile_setup()
+    data = request.get_json()
+    keys = data.keys()
+    for item in keys:        
+        if item == 'rtIp' or item == 'rtPort':
+            udpSender('returnip,{},{}'.format(data['rtIp'], data['rtPort']))
+        elif item == 'ip' or item == 'nm' or item == 'gw':
+            pass
+        else:
+            udpSender('{},{}'.format(item, data[item]))
+        setup[item] = data[item]
+    print(setup)
+    with open('../setup.json', 'w') as setupFile:
+        json.dump(setup, setupFile)
+    
+    return jsonify(success=True)
 
 @app.route('/getFileList', methods = ['GET'])
 def refresh_files():
@@ -71,7 +92,7 @@ def PlayListFresh():
     return (jsonify(play_list))
 
 def loadfile_setup():
-    with open('..setup.json', 'r') as setupfile:
+    with open('../setup.json', 'r') as setupfile:
         setup = json.load(setupfile)
     return (setup)
 
