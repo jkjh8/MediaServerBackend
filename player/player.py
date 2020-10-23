@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-import sys, vlc, socket, os.path, threading, json, tkinter
+import sys, vlc, socket, os.path, threading, json, re
 from ast import literal_eval
 from _thread import *
 from time import sleep
+from player_api import api
+from time_format import timeFormat
 
 instance = vlc.Instance()
 player = instance.media_player_new()
@@ -11,7 +13,8 @@ setup = {}
 playlist = {}
 port = 12302
 MEDIA_PATH = os.path.abspath('./media/')
-
+SETUPFILE_PATH = './setup.json'
+PLAYLIST_PATH = './playlist.json'
 
 class main_UdpServer():    
     def __init__(self):
@@ -24,94 +27,47 @@ class main_UdpServer():
         self.setup_load()
         self.mp = media_Player(self.setup)
 
+    def run(self):
+        while True:
+            data, info = self.sock.recvfrom(65535)
+            recv_Msg = data.decode()
+            try:
+                if recv_Msg.startswith('stop'):
+                    self.mp.stop()
+                elif recv_Msg.startswith('pause'):
+                    self.mp.pause()
+                elif recv_Msg.startswith('playid'):
+                    self.play_id = int(re.findall('\d+', recv_Msg)[0])
+                    self.playid()
+                elif recv_Msg.startswith('play'):
+                    func, file = recv_Msg.split(",")
+                    self.play(file)
+                else:
+                    rtmsg, self.setup = api(recv_Msg, self.setup, self.playlist)
+                    self.udpSender(rtmsg)
+                    self.setup_save()
+            except:
+                self.udpSender("unknown message")
+
     def setup_load(self):
         try:
-            with open('setup.json','r') as setupfile:
+            with open(SETUPFILE_PATH,'r') as setupfile:
                 self.setup = json.load(setupfile)
         except:
             print('Setup file not found')
             self.setup = {}
 
     def setup_save(self):
-        with open('setup.json', 'w') as setupfile:
+        with open(SETUPFILE_PATH, 'w') as setupfile:
             data = json.dump(self.setup, setupfile)
         print('setupfile save')
 
     def playlist_load(self):
         try:
-            with open('playlist.json','r') as playlist_file:
+            with open(PLAYLIST_PATH,'r') as playlist_file:
                 self.playlist = json.load(playlist_file)
         except:
             self.playlist = {}
-
-    def run(self):
-        while True:
-            data, info = self.sock.recvfrom(65535)
-            recv_Msg = data.decode()
-            # print(recv_Msg)
-            self.dataParcing(recv_Msg)
-            
-    def dataParcing(self, data):
-        try:
-
-            if data == "stop":
-                self.mp.stop()
-                self.udpSender('stop')
-            elif data == "pause":
-                self.mp.pause()
-                self.udpSender('pause')
-            elif data == "getlist":
-                list = []
-                for item in self.playlist:
-                    list.append(item['name'])
-                self.udpSender('playlist,{}'.format(list))
-            else:
-                comm = data.split(',')
-                if comm[0] == 'play':
-                    self.play(comm[1])
-
-                elif comm[0] == 'playid':
-                    self.play_id = (int(comm[1]))
-                    self.playid()
-
-                elif comm[0] == 'returnip':
-                    self.setup['rtIp'] = comm[1]; self.setup['rtPort'] = int(comm[2])
-                    self.udpSender('returnAddr,{},{}'.format(self.setup['rtIp'], self.setup['rtPort']))
-                
-                elif comm[0] == 'fullscreen':
-                    print(comm[1], type(comm[1]))
-                    if comm[1] == 'True' or comm[1] == 'true' or comm[1] == '1': self.setup['fullscreen'] = True
-                    else: self.setup['fullscreen'] = False
-                    self.mp.fullscreen();
-
-                elif comm[0] == 'loop_one':
-                    if comm[1] == 'True' or comm[1] == 'true' or comm[1] == '1': self.setup['loop_one'] = True
-                    else: self.setup['loop_one'] = False
-                    print('**********************', self.setup['loop_one'])
-                    self.udpSender('loop_one,{}'.format(self.setup['loop_one']))
-
-                elif comm[0] == 'loop':
-                    if comm[1] == 'True' or comm[1] == 'true' or comm[1] == '1': self.setup['loop_one'] = True
-                    else: self.setup['loop'] = False
-                    self.udpSender('loop,{}'.format(self.setup['loop']))
-
-                elif comm[0] == 'progress':
-                    if comm[1] == 'True' or comm[1] == 'true' or comm[1] == '1': self.setup['progress'] = True
-                    else: self.setup['progress'] = False
-                
-                elif comm[0] == 'playlist':
-                    self.playlist = json.loads(data.replace('playlist,','').replace("'",'"'))
-
-                elif comm[0] == 'endclose':
-                    print("*****************************endClose")
-                    if comm[1] == 'True' or comm[1] == 'true' or comm[1] == '1': self.setup['endclose'] = True
-                    else: self.setup['endclose'] = False
-                else:
-                    start_new_thread(self.udpSender, ('unknown command'),)
-            start_new_thread(self.udpSender, (data,))
-            self.setup_save()
-        except Exception as e:
-            print(e)
 
     def play(self, playfile):
         file = os.path.join(MEDIA_PATH, playfile)
@@ -140,28 +96,25 @@ class main_UdpServer():
     
     def songFinished(self, play_file):
         self.playlist_load()
-        print(self.setup)
         if self.setup['loop_one'] == True:
-            print('loop_one')
             self.playid()
             return
         elif self.setup['loop'] == True:
-            print('loop')
-            if self.play_id == len(self.playlist):
+            if self.play_id == len(self.playlist)-1:
                 self.play_id = 0
             else:
                 self.play_id = self.play_id + 1
-            self.mp.playid()
+            print(self.play_id)
+            self.playid()
             return
         elif self.setup['endclose'] == True:
-            print('stop')
             self.mp.stop()           
 
 class media_Player():
     def __init__(self, setup):
         self.setup = setup
-        self.windowthread = threading.Thread(target=self.create_window)
-        self.windowthread.start()
+        # self.windowthread = threading.Thread(target=self.create_window)
+        # self.windowthread.start()
         self.mediafile = None
         self.curr_time = None
         self.duration = None
@@ -171,7 +124,7 @@ class media_Player():
     def setNewPlayer(self):
         self.instance = vlc.Instance()
         self.player = self.instance.media_player_new()
-        self.player.set_hwnd(self.window.winfo_id())
+        # self.player.set_hwnd(self.window.winfo_id())
         self.setEventManager()
 
     def create_window(self):
@@ -198,12 +151,11 @@ class media_Player():
         self.player.set_media(self.media)
 
     def play(self, mediaFile):
+        print(mediaFile)
         if self.mediafile == mediaFile: self.player.stop()
         else: self.mediafile = mediaFile; self.setMedia(mediaFile)
-        try:
-            self.window.attributes("-fullscreen", self.setup['fullscreen'])
-        except:
-            self.window.attributes("-fullscreen", True)
+        if not self.player.get_fullscreen():
+            self.fullscreen()
         self.player.play()
 
     def pause(self):
@@ -214,12 +166,15 @@ class media_Player():
         self.player.stop()
 
     def fullscreen(self):
-        print('fullscreen')
         try:
-            self.window.attributes("-fullscreen", self.setup['fullscreen'])
-            
+            self.player.set_fullscreen(self.setup['fullscreen'])
         except:
-            self.window.attributes("-fullscreen", True)
+            self.player.set_fullscreen(True)
+        # try:
+        #     self.window.attributes("-fullscreen", self.setup['fullscreen'])
+            
+        # except:
+        #     self.window.attributes("-fullscreen", True)
 
     def songFinished(self,evnet):
         start_new_thread(app.songFinished, (self.mediafile,))
@@ -229,24 +184,17 @@ class media_Player():
         start_new_thread(app.udpSender, ('end',))
 
     def getMediaLength(self, time, player):
-        sendTime = self.timeFormat(time.u.new_length)
+        sendTime = timeFormat(time.u.new_length)
         if self.duration != sendTime:
             self.duration = sendTime
             start_new_thread(app.udpSender, ('length,{}'.format(sendTime),))
 
     def getCurrentTime(self, time, player):
         if app.setup['progress']:
-            sendTime = self.timeFormat(time.u.new_time)
+            sendTime = timeFormat(time.u.new_time)
             if self.curr_time != sendTime:
                 self.curr_time = sendTime
                 start_new_thread(app.udpSender, ('current,{}'.format(sendTime),))
-
-    def timeFormat(self, ms):
-        time = ms/1000
-        min, sec = divmod(time, 60)
-        hour, min = divmod(min, 60)
-        return ("%02d:%02d:%02d" % (hour, min, sec))
-
 
 if __name__ == "__main__":
     app = main_UdpServer()
