@@ -1,14 +1,11 @@
 from flask import Flask, jsonify, request, render_template, _app_ctx_stack, Response
 from flask_socketio import SocketIO, send, emit
 from flask_cors import CORS
-from werkzeug.utils import secure_filename
-from pymediainfo import MediaInfo
+# from pymediainfo import MediaInfo
 from flask_pymongo import PyMongo
-from bson import json_util
-import os, socket, json, sqlite3
+from mediainfo import FileMediaInfo
+import os, socket, json, threading, datetime, jwt
 
-
-DATABASE = 'MediaPlayer.db'
 playServerIP = "127.0.0.1"
 playServerPort = 12302
 
@@ -20,18 +17,20 @@ MEDIA_DIR = os.path.join(BASE_DIR,'media')
 # instantiate the app
 app = Flask(__name__)
 app.config["MONGO_URI"] = "mongodb://localhost:27017/MediaServer"
-app.config['SECRET_KEY'] = 'secret_key'
-
+app.config['SECRET_KEY'] = 'sdfkhK#k2!uds#^j&3cf#es*327193%^12902)'
+app.config['TESTING'] = True
+app.config['JSON_AS_ASCII'] = True
+CORS(app, resources={r'/*': {'origins': '*'}})
 socketio = SocketIO(app, cors_allowed_origins="*")
 mongo = PyMongo(app)
+db = mongo.db
 
-# enable CORS
-CORS(app, resources={r'/*': {'origins': '*'}})
+FileMediaInfo(mongo.db.filelist, MEDIA_DIR)
 
 # sanity check route
 @app.route('/', methods=['GET'])
 def test_router():
-    users = list(mongo.db.users.find({}))
+    users = list(db.users.find({}))
     print(users)
     return socket.gethostbyname(socket.gethostname())
 
@@ -50,139 +49,83 @@ def play_command():
 def upload_file():
     f = request.files['file']
     f.save(os.path.join(MEDIA_DIR, f.filename))
+    FileMediaInfo(mongo.db.filelist, MEDIA_DIR)
+    soket_get_filelist()
     return jsonify(success=True)
 
-@app.route('/getSetup', methods = ['GET'])
-def get_setup():
-    print('getSetup')
-    # return jsonify(loadfile_setup())
-    return("OK")
+@app.route('/setup', methods = ['GET','POST'])
+def setup():
+    if request.method == 'POST':
+        data = request.get_json()
+        db.setup.save(data)
+        socket_get_player_setup()
+        udpSender('refresh')    
+    return jsonify(setuplist = db.setup.find_one())
 
-@app.route('/setSetup', methods = ['POST'])
-def set_setup():
-    print('setSetup')
-    setup = loadfile_setup()
-    data = request.get_json()
-    keys = data.keys()
-    for item in keys:        
-        if item == 'rtIp' or item == 'rtPort':
-            udpSender('returnip,{},{}'.format(data['rtIp'], data['rtPort']))
-        elif item == 'ip' or item == 'nm' or item == 'gw' or item == 'dhcp':
-            pass
-        else:
-            udpSender('{},{}'.format(item, data[item]))
-        setup[item] = data[item]
-    print(setup)
-    # with open('../setup.json', 'w') as setupFile:
-    #     json.dump(setup, setupFile)
-    
-    return jsonify(success=True)
-
-@app.route('/getFileList', methods = ['GET'])
+@app.route('/filelist', methods = ['GET'])
 def refresh_files():
-    getMediaFileData()
-    files = list(mongo.db.filelist.find({}))
-    return Response(json.dumps(files, default=json_util.default))
+    files = list(db.filelist.find({},{ '_id': False }))
+    print(files)
+    return jsonify(files)
 
-@app.route('/setPlayList', methods = ['POST'])
-def setPlayList():
-    data = request.get_json()
-    savefile_playlist(data)
-    socket_get_playlist(data)
-    udpSender('playlist,{}'.format(data))
-    return jsonify(success=True)
+@app.route('/playlist', methods = ['GET','POST'])
+def playlist():
+    if request.method == 'POST':
+        data = request.get_json()
+        update_playlist(data)
+        # socket_get_playlist()
+    files = list(db.playlist.find({},{ '_id': False }))
+    # return json.dumps(files, default=json_util.default)
+    return jsonify(files)
 
-@app.route('/getPlayList', methods = ['GET'])
-def getPlayList():
-    files = list(mongo.db.playlist.find({}))
-    return Response(json.dumps(files, default=json_util.default))
-
-@app.route('/playlistrefresh', methods = ['GET'])
-def PlayListFresh():
-    play_list = compare_playlist()
-    # savefile_playlist(play_list)
-    return (jsonify(play_list))
-
-def loadfile_setup():
-    with open(os.path.join(BASE_DIR,'./setup.json'), 'r') as setupfile:
-        setup = json.load(setupfile)
-    return (setup)
-
-def loadfile_playlist():
-    with open(os.path.join(BASE_DIR,'./playlist.json'), 'r') as playlistfile:
-        playList = json.load(playlistfile)
-    return (playList)
-
+@app.route('/compare')
 def compare_playlist():
-    play_list = loadfile_playlist()
-    fileNameList = os.listdir(MEDIA_DIR)
+    play_list = list(db.playlist.find({},{ '_id': False }))
+    file_list = list(db.filelist.find({},{ '_id': False }))
     for file in play_list:
-        if os.path.basename(file['complete_name']) not in fileNameList:
-            print(file)
-            play_list.remove(file)
-    return(play_list)
+        if not db.filelist.find_one({ 'complete_name': file['complete_name'] }):
+            db.playlist.delete_one({ 'complete_name': file['complete_name'] })
+    return '200'
+    # return(play_list)
 
 @app.route('/removeFile', methods = ['POST'])
 def remove_file():
-    data = request.get_json()
-    file = data['file']    
+    file = request.get_json()['file']
     if os.path.isfile(file):
+        print(file)
         os.remove(file)
-    savefile_playlist(compare_playlist())
-    fileList = getMediaFileData()
-    socket_get_filelist(fileList)    
-    return jsonify(fileList)
+        db.filelist.delete_one({ 'complete_name': file })
+    # getMediaFileFromDisk()
+    files = list(db.filelist.find({},{ '_id': False }))
+    return jsonify(files)
 
-def savefile_playlist(playlist):
-    mongo.db.playlist.delete_many({})
+def update_playlist(playlist):
+    print(playlist)
+    db.playlist.delete_many({})
     files = []
     for idx, item in enumerate(playlist):
         item['playid'] = idx
         files.append(item)
-    mongo.db.playlist.insert_many(files)
-    print('inset db insert*****************')
-    # with open(os.path.join(BASE_DIR,'/playlist.json'), 'w') as playlistfile:
-    #     json.dump(playlist, playlistfile)
-
-def getMediaFileData():
-    mongo.db.filelist.delete_many({})
-    fileList = []
-    fileNameList = os.listdir(MEDIA_DIR)
-    for item in fileNameList:
-        fileInfo = {}
-        info = MediaInfo.parse(os.path.join(MEDIA_DIR,item)).tracks[0]
-        fileInfo['name'] = info.file_name
-        fileInfo['complete_name'] = info.complete_name
-        fileInfo['type'] = info.file_extension
-        fileInfo['size'] = info.file_size
-        fileInfo['duration'] = info.duration
-        fileList.append(fileInfo)
-    insert = mongo.db.filelist.insert_many(fileList)
-    print(insert.inserted_ids)
-    return(insert.inserted_ids)
-
-def socket_get_playlist(data):
-    print('socket get playlist*****************')
-    files = list(mongo.db.playlist.find({}))
-    socketio.emit('playlist', json.dumps(files, default=json_util.default))
-
-def socket_get_filelist(data):
-    print('socket get filelist*****************')
-    files = list(mongo.db.filelist.find({}))
-    socketio.emit('filelist', json.dumps(files, default=json_util.default))
-
-def socket_get_player_setup(data):
-    socketio.emit('playersetup', data)
+    db.playlist.insert_many(files)
 
 @socketio.on('filelist')
-def socket_Get_File_list_Call():
-    print('list')
-    data = getMediaFileData()
-    emit('filelist', data, broadcast=True)
+def soket_get_filelist():
+    print('filelist send')
+    files = list(db.filelist.find({},{ '_id': False }))
+    socketio.emit('filelist', files, broadcast=True)
 
-@socketio.on('message')
-def handle_message(message):
-    send("ok MSG")
+@socketio.on('playlist')
+def socket_get_playlist():
+    files = list(db.playlist.find({},{ '_id': False }))
+    socketio.emit('playlist', files, broadcast=True)
+
+@socketio.on('setup')
+def socket_get_player_setup():
+    print('setup send')
+    setup = db.setup.find_one()
+    setup['_id'] = str(setup['_id'])
+    print(setup)
+    socketio.emit('setup', setup, broadcast=True)
 
 def udpSender(msg):
     try:
@@ -191,4 +134,4 @@ def udpSender(msg):
         print('error : ', e)
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0',port=12300, debug=True)
+    socketio.run(app, port=12300, debug=True)

@@ -1,75 +1,101 @@
-def api(data, setup, playlist):
+from pymongo import MongoClient
+
+
+def api(data, db):    
     if data.startswith("returnip"):
+        currentdbId = db.setup.find_one({},{'_id': 1})
         func, ip, port = data.split(',')
-        setup['rtIp'] = ip; setup['rtPort'] = int(port)
-        return ('returnAddr,{},{}'.format(setup['rtIp'], setup['rtPort']), setup)
+
+        db.setup.update_one(currentdbId, { '$set': { 'rtIp': ip } })
+        db.setup.update_one(currentdbId, { '$set': { 'rtPort': int(port) } })
+        return ('returnAddr,{},{}'.format(ip, port))
         
     elif data.startswith("fullscreen"):
+        currentdbId = db.setup.find_one({},{'_id': 1})
         if '1' in data or 'true' in data or 'True' in data:
-            setup['fullscreen'] = True
-        else: setup['fullscreen'] = False
-        return('fullscreen,{}'.format(setup['fullscreen']), setup)
+            value = True
+        else: value = False
+        db.setup.update_one(currentdbId, { '$set': { 'fullscreen': value }})
+        return('fullscreen,{}'.format(value))
 
     elif data.startswith('loop_one'):
+        currentdbId = db.setup.find_one({},{'_id': 1})
         if '1' in data or 'true' in data or 'True' in data:
-            setup['loop_one'] = True
-        else: setup['loop_one'] = False
-        return ('loop_one,{}'.format(setup['loop_one']), setup)
+            value = True
+        else: value = False
+        db.setup.update_one(currentdbId, { '$set': { 'loop_one': value } })
+        return ('loop_one,{}'.format(value))
 
     elif data.startswith('loop'):
+        currentdbId = db.setup.find_one({},{'_id': 1})
         if '1' in data or 'true' in data or 'True' in data:
-            setup['loop'] = True
-        else: setup['loop'] = False
-        return ('loop,{}'.format(setup['loop']), setup)
+            value = True
+        else: value = False
+        db.setup.update_one(currentdbId, { '$set': { 'loop': value } })
+        return ('loop,{}'.format(value))
 
     elif data.startswith('progress'):
+        currentdbId = db.setup.find_one({},{'_id': 1})
         if '1' in data or 'true' in data or 'True' in data:
-            setup['progress'] = True
-        else: setup['progress'] = False
-        return ('progress,{}'.format(setup['progress']), setup)
+            value = True
+        else: value = False
+        db.setup.update_one(currentdbId, { '$set': { 'progress': value } })
+        return ('progress,{}'.format(value))
 
     elif data.startswith('endclose'):
+        currentdbId = db.setup.find_one({},{'_id': 1})
         if '1' in data or 'true' in data or 'True' in data:
-            setup['endclose'] = True
-        else: setup['endclose'] = False
-        return ('endclose,{}'.format(setup['endclose']), setup)
+            value = True
+        else: value = False
+        db.setup.update_one(currentdbId, { '$set': { 'endclose': value } })
+        return ('endclose,{}'.format(value))
 
     elif data == ("getlist"):
-        list = []
+        playlist = db.playlist.find({},{ 'complete_name': 1, 'name': 1, 'type': 1, 'playid': 1, '_id': False })
+        rtList = []
         for item in playlist:
-            list.append(item['name'].replace("'",""))
-        return ('getlist,{}'.format(','.join(list)), setup)
+            rtList.append(item['name'].replace("'",""))
+        return ('getList,{}'.format(','.join(rtList)))
 
     elif data == ("getlist_full"):
-        list = []
+        playlist = db.playlist.find({},{ 'complete_name': 1, 'name': 1, 'type': 1, 'playid': 1, '_id': False })
+        rtList = []
         for item in playlist:
-            list.append("{}.{}".format(item['name'], item['type']).replace("'",""))
-        return ('getlist_full,{}'.format(','.join(list)), setup)
+            rtList.append("{}.{}".format(item['name'], item['type']).replace("'",""))
+        return ('getlist_full,{}'.format(','.join(rtList)))
 
     elif data == ("getaudiolist"):
-        list = []
+        playlist = db.playlist.find(
+            { '$or': [{'type': 'mp3'}, {'type': 'wav'}] },
+            { 'complete_name': 1, 'name': 1, 'type': 1, 'playid': 1, '_id': False })
+        rtList = []
         for item in playlist:
-            if item['type'] == 'mp3' or item['type'] == 'wav' or item['type'] == 'flac' or item['type'] == 'aac':
-                list.append(item['name'].replace("'",""))
-        return ('getaudiolist,{}'.format(','.join(list)), setup)
+            rtList.append(item['name'].replace("'",""))
+        return ('getaudiolist,{}'.format(','.join(rtList)))
 
     elif data == ("getaudiolist_full"):
-        list = []
+        playlist = db.playlist.find(
+            { '$or': [{'type': 'mp3'}, {'type': 'wav'}, {'type': 'flac'}, {'type': 'aac'}] },
+            { 'complete_name': 1, 'name': 1, 'type': 1, 'playid': 1, '_id': False })
+        rtList = []
         for item in playlist:
-            if item['type'] == 'mp3' or item['type'] == 'wav' or item['type'] == 'flac' or item['type'] == 'aac':
-                list.append("{}.{}".format(item['name'], item['type']).replace("'",""))
-        return ('getaudiolist_full,{}'.format(','.join(list)), setup)
+            rtList.append("{}.{}".format(item['name'], item['type']).replace("'",""))
+        return ('getaudiolist_full,{}'.format(','.join(rtList)))
 
     elif data == ("getvideolist"):
-        list = []
+        playlist = db.playlist.find(
+            { '$or': [{'type': 'mp4'}, {'type': 'wmv'}, {'type': 'mov'}, {'type': 'avi'}, {'type': 'mpeg'}, {'type': 'asf'}] },
+            { 'complete_name': 1, 'name': 1, 'type': 1, 'playid': 1, '_id': False })
+        rtList = []
         for item in playlist:
-            if item['type'] == 'mp4' or item['type'] == 'mov' or item['type'] == 'wmv' or item['type'] == 'mov' or item['type'] == 'avi' or item['type'] == 'mpeg' or item['type'] == 'asf':
-                list.append(item['name'].replace("'",""))
-        return ('getvideolist,{}'.format(','.join(list)), setup)
+            rtList.append(item['name'].replace("'",""))
+        return ('getvideolist,{}'.format(','.join(rtList)))
 
     elif data == ("getvideolist_full"):
-        list = []
+        playlist = db.playlist.find(
+            { '$or': [{'type': 'mp4'}, {'type': 'wmv'}, {'type': 'mov'}, {'type': 'avi'}, {'type': 'mpeg'}, {'type': 'asf'}] },
+            { 'complete_name': 1, 'name': 1, 'type': 1, 'playid': 1, '_id': False })
+        rtList = []
         for item in playlist:
-            if item['type'] == 'mp4' or item['type'] == 'mov' or item['type'] == 'wmv' or item['type'] == 'mov' or item['type'] == 'avi' or item['type'] == 'mpeg' or item['type'] == 'asf':
-                list.append("{}.{}".format(item['name'], item['type']).replace("'",""))
-        return ('getvideolist_full,{}'.format(','.join(list)), setup)
+            rtList.append("{}.{}".format(item['name'], item['type']).replace("'",""))
+        return ('getvideolist_full,{}'.format(','.join(rtList)))
