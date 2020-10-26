@@ -12,9 +12,9 @@ def api(data, db):
         
     elif data.startswith("fullscreen"):
         currentdbId = db.setup.find_one({},{'_id': 1})
-        if '1' in data or 'true' in data or 'True' in data:
-            value = True
-        else: value = False
+        if '0' in data or 'false' in data or 'False' in data:
+            value = False
+        else: value = True
         db.setup.update_one(currentdbId, { '$set': { 'fullscreen': value }})
         return('fullscreen,{}'.format(value))
 

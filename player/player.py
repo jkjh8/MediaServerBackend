@@ -21,13 +21,17 @@ class PlayerServer():
         self.playlist = None
         self.udpSendSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(('127.0.0.1', port))
-        print("Udp Server Start {} : {}".format('127.0.0.1', 12302))
+        self.sock.bind(('0.0.0.0', port))
+        print("Udp Server Start {} : {}".format('0.0.0.0', 12302))
         self.setup = db.setup.find_one({})
         self.mp = media_Player(self.setup)
-        if self.setup['poweronplay'] == True:
-            self.play_id = 0
-            self.playid()
+        try:
+            if self.setup['poweronplay'] == True:
+                sleep(5)
+                self.play_id = 0
+                self.playid()
+        except:
+            pass
 
     def run(self):
         while True:
@@ -45,11 +49,14 @@ class PlayerServer():
                 func, file = recv_Msg.split(",")
                 self.play(file)
             elif recv_Msg.startswith('refresh'):
-                self.setup = db.setup.find_one({})
+                pass
             else:
-                rtmsg = api(recv_Msg, db)
-                self.setup = db.setup.find_one({})                
-                start_new_thread(self.udpSender, ('file_error',))
+                msg =  api(recv_Msg, db)                           
+                start_new_thread(self.udpSender, (msg,))
+            self.setup = db.setup.find_one({})
+            self.mp.refSetup(self.setup)
+            self.mp.fullscreen()
+
             # except:
             #     self.udpSender("unknown message")
 
@@ -73,7 +80,7 @@ class PlayerServer():
             start_new_thread(self.udpSender, ('out_of_playlist_range',))
 
     def udpSender(self, msg):
-        print(msg)
+        print(self.setup)
         print(self.setup['rtIp'], self.setup['rtPort'])
         self.udpSendSock.sendto(msg.encode(), (self.setup['rtIp'], self.setup['rtPort']))
     
@@ -101,7 +108,8 @@ class media_Player():
         self.curr_time = None
         self.duration = None
         self.setNewPlayer()
-        self.fullscreen()
+        if self.setup['fullscreen'] == True:
+            self.player.set_fullscreen(True)
 
     def setNewPlayer(self):
         self.instance = vlc.Instance()
@@ -109,15 +117,15 @@ class media_Player():
         # self.player.set_hwnd(self.window.winfo_id())
         self.setEventManager()
 
-    def create_window(self):
-        self.window = tkinter.Tk()
-        # self.window.overrideredirect(True)
-        self.window.protocol('WM_DELETE_WINDOW', self.closed_window)
-        self.window.configure(bg="black")
-        self.window.geometry("800x480")
-        self.window.title('MEDIA PLAYER')
-        self.window.iconbitmap(default = 'favicon_player.ico') 
-        self.window.mainloop()
+    # def create_window(self):
+    #     self.window = tkinter.Tk()
+    #     # self.window.overrideredirect(True)
+    #     self.window.protocol('WM_DELETE_WINDOW', self.closed_window)
+    #     self.window.configure(bg="black")
+    #     self.window.geometry("800x480")
+    #     self.window.title('MEDIA PLAYER')
+    #     self.window.iconbitmap(default = 'favicon_player.ico') 
+    #     self.window.mainloop()
 
     def closed_window(self):
         print('window closed')        
@@ -132,13 +140,15 @@ class media_Player():
         self.media = self.instance.media_new(mediaFile)
         self.player.set_media(self.media)
 
+    def refSetup(self, setup):
+        self.setup = setup
+
     def play(self, mediaFile):
         print(mediaFile)
         if self.mediafile == mediaFile: self.player.stop()
         else: self.mediafile = mediaFile; self.setMedia(mediaFile)
-        if not self.player.get_fullscreen():
-            self.fullscreen()
         self.player.play()
+        self.fullscreen()
 
     def pause(self):
         self.player.pause()
@@ -183,5 +193,5 @@ class media_Player():
         
 
 if __name__ == "__main__":
-    app = main_UdpServer()
+    app = PlayerServer()
     app.run()

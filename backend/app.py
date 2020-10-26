@@ -4,7 +4,7 @@ from flask_cors import CORS
 # from pymediainfo import MediaInfo
 from flask_pymongo import PyMongo
 from mediainfo import FileMediaInfo
-import os, socket, json, threading, datetime, jwt
+import os, socket, json, threading, datetime, netifaces, time
 
 playServerIP = "127.0.0.1"
 playServerPort = 12302
@@ -13,6 +13,7 @@ udpSendSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
 MEDIA_DIR = os.path.join(BASE_DIR,'media')
+print(MEDIA_DIR)
 
 # instantiate the app
 app = Flask(__name__)
@@ -27,12 +28,17 @@ db = mongo.db
 
 FileMediaInfo(mongo.db.filelist, MEDIA_DIR)
 
+def getip():    
+    netifaces.ifaddresses('eno2')
+    IP =  netifaces.ifaddresses('eno2')[netifaces.AF_INET][0]['addr']
+    return IP
+
 # sanity check route
 @app.route('/', methods=['GET'])
 def test_router():
-    users = list(db.users.find({}))
-    print(users)
-    return socket.gethostbyname(socket.gethostname())
+    # time.sleep(3)
+    ip = getip()
+    return ip
 
 @app.route('/player', methods=['post'])
 def play_command():
@@ -43,6 +49,7 @@ def play_command():
         udpSender("{},{}".format(command,file))
     else:
         udpSender(command)
+    socket_get_ip()
     return jsonify(command)
 
 @app.route('/upload', methods = ['POST'])
@@ -59,8 +66,8 @@ def setup():
         data = request.get_json()
         db.setup.save(data)
         socket_get_player_setup()
-        udpSender('refresh')    
-    return jsonify(setuplist = db.setup.find_one())
+    udpSender('refresh')
+    return jsonify(db.setup.find_one())
 
 @app.route('/filelist', methods = ['GET'])
 def refresh_files():
@@ -75,6 +82,7 @@ def playlist():
         update_playlist(data)
         # socket_get_playlist()
     files = list(db.playlist.find({},{ '_id': False }))
+    socket_get_ip()
     # return json.dumps(files, default=json_util.default)
     return jsonify(files)
 
@@ -127,6 +135,12 @@ def socket_get_player_setup():
     print(setup)
     socketio.emit('setup', setup, broadcast=True)
 
+@socketio.on('getip')
+def socket_get_ip():
+    ip = getip()
+    print(ip)
+    socketio.emit('getip', ip, broadcast=True)
+
 def udpSender(msg):
     try:
         udpSendSock.sendto(msg.encode(), (playServerIP, playServerPort))
@@ -134,4 +148,4 @@ def udpSender(msg):
         print('error : ', e)
 
 if __name__ == '__main__':
-    socketio.run(app, port=12300, debug=True)
+    socketio.run(app, host="0.0.0.0", port=12300, debug=True)

@@ -1,1 +1,1 @@
-{"rtIp": "127.0.0.2", "rtPort": 9999, "progress": true, "fullscreen": false, "loop_one": true, "loop": false, "ip": "127.0.0.1", "nm": "255.255.255.0", "endclose": true}
+{"rtIp": "127.0.0.2", "rtPort": 9999, "progress": true, "fullscreen": false, "loop_one": true, "loop": false, "ip": "127.0.0.1", "nm": "255.255.255.0", "endclose": true, "poweronplay": false}
